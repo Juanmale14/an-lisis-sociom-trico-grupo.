@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizadora Sociométrica - Edición Pastel Moderno</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Fuente Plus Jakarta Sans (Más moderna y geométrica) -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- SheetJS -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- html2pdf -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Vis.js -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                    colors: {
+                        pastel: {
+                            bg: '#f8fafc', // Fondo general muy suave
+                            primary: '#8b5cf6', // Violeta principal
+                            secondary: '#ec4899', // Rosa
+                            success: '#10b981', // Esmeralda suave
+                            card: '#ffffff',
+                            text: '#334155'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
+        
+        /* Animaciones */
+        .tab-content { transition: opacity 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        
+        /* Estilos Drag & Drop Modernos */
+        .dropzone-modern {
+            border: 2px dashed #cbd5e1;
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            transition: all 0.3s ease;
+        }
+        .dropzone-modern:hover {
+            border-color: #8b5cf6;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(139, 92, 246, 0.15);
+        }
+        .drag-active { border-color: #8b5cf6; background-color: #f5f3ff; }
+        .drag-active-self { border-color: #ec4899; background-color: #fdf2f8; }
+
+        /* Contenedores de sociogramas */
+        .sociogram-box {
+            width: 100%; height: 600px;
+            border: 1px solid #e2e8f0; background-color: #ffffff;
+            border-radius: 1rem; position: relative; overflow: hidden;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        /* Estilos Grupos Drag & Drop */
+        .group-container {
+            min-height: 150px;
+            background: #ffffff;
+            border-radius: 1rem;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .group-container.drag-over {
+            background-color: #eff6ff; border-color: #60a5fa; transform: scale(1.02);
+        }
+        .student-card {
+            cursor: grab; transition: transform 0.1s, box-shadow 0.1s;
+            background: #f8fafc; border: 1px solid #f1f5f9;
+        }
+        .student-card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .student-card:active { cursor: grabbing; transform: scale(0.98); }
+
+        /* Scrollbar personalizado suave */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* --- PDF STYLES --- */
+        .print-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; justify-content: center; padding: 20px; overflow: auto; }
+        .print-container { width: 800px; background: white; font-family: 'Plus Jakarta Sans', sans-serif; color: #1e293b; }
+        .pdf-cover-page { width: 800px; height: 1120px; padding: 50px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; page-break-after: always; }
+        .pdf-content-page { width: 800px; min-height: 1120px; padding: 50px; background: white; }
+        .pdf-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 20px; }
+        .pdf-table th { background-color: #f8fafc; color: #334155; font-weight: 700; padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0; }
+        .pdf-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #475569; }
+        .pdf-loading-msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e293b; color: white; padding: 20px 40px; border-radius: 12px; font-weight: bold; z-index: 10000; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+    
+        /* Modal Instrucciones */
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+            z-index: 50; display: none; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: white; width: 90%; max-width: 700px; max-height: 90vh;
+            border-radius: 1.5rem; padding: 2rem; overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes modalPop { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+
+    <!-- HEADER -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white p-3 rounded-xl shadow-lg shadow-violet-200">
+                    <i class="fa-solid fa-users-viewfinder text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-tight">ANALIZADORA<br><span class="text-violet-600">SOCIOMÉTRICA</span></h1>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="hidden md:inline-block px-3 py-1 bg-violet-50 text-violet-600 rounded-full text-xs font-bold border border-violet-100">v9.0 Pastel</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Tarjeta Principal -->
+        <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 min-h-[700px] flex flex-col w-full mb-8 relative overflow-hidden">
+            
+            <!-- NAVEGACIÓN -->
+            <nav class="flex border-b border-slate-100 bg-white/50 backdrop-blur-sm sticky top-0 z-30 overflow-x-auto">
+                <button onclick="switchTab('tab-datos')" id="btn-tab-datos" class="tab-btn group flex-1 min-w-[140px] py-5 px-4 text-sm font-bold text-violet-600 border-b-2 border-violet-500 hover:bg-violet-50/50 transition-all">
+                    <i class="fa-solid fa-database mr-2 group-hover:scale-110 transition-transform"></i> DATOS
+                </button>
+                <button onclick="switchTab('tab-perc')" id="btn-tab-perc" class="tab-btn group flex-1 min-w-[140px] py-5 px-4 text-sm font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-eye mr-2 group-hover:scale-110 transition-transform"></i> PERCEPCIÓN
+                </button>
+                <button onclick="switchTab('tab-auto')" id="btn-tab-auto" class="tab-btn group flex-1 min-w-[140px] py-5 px-4 text-sm font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-user-astronaut mr-2 group-hover:scale-110 transition-transform"></i> AUTOPERCEPCIÓN
+                </button>
+                <button onclick="switchTab('tab-contra')" id="btn-tab-contra" class="tab-btn group flex-1 min-w-[140px] py-5 px-4 text-sm font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-2 group-hover:scale-110 transition-transform"></i> CONTRASTE
+                </button>
+                <button onclick="switchTab('tab-export')" id="btn-tab-export" class="tab-btn group flex-1 min-w-[140px] py-5 px-4 text-sm font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-file-export mr-2 group-hover:scale-110 transition-transform"></i> INFORMES
+                </button>
+            </nav>
+
+            <!-- CONTENIDO -->
+            <div class="p-6 sm:p-10 flex-1 relative bg-gradient-to-b from-white to-slate-50/50">
+                
+                <!-- 1. PESTAÑA DATOS -->
+                <section id="tab-datos" class="tab-content h-full flex flex-col gap-8 animate-fade-in">
+                    
+                    <!-- Header Sección -->
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+                        <div>
+                            <h2 class="text-3xl font-extrabold text-slate-800">Centro de Datos</h2>
+                            <p class="text-slate-500 mt-1">Carga tus matrices para comenzar el análisis.</p>
+                        </div>
+                        <div class="flex gap-3">
+                            <button onclick="toggleInstructions()" class="px-5 py-2.5 rounded-full bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors shadow-sm text-sm flex items-center">
+                                <i class="fa-regular fa-circle-question mr-2 text-lg"></i> ¿Cómo funciona?
+                            </button>
+                            <button onclick="loadDemoData()" class="px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-200 to-orange-300 text-orange-900 font-bold hover:shadow-lg hover:scale-105 transition-all shadow-md text-sm flex items-center">
+                                <i class="fa-solid fa-bolt mr-2"></i> Prueba Rápida
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-8 max-w-5xl mx-auto w-full">
+                        
+                        <!-- Selector Grupo -->
+                        <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                            <label class="block text-sm font-bold text-slate-700 mb-3 ml-1">1. Grupo Académico</label>
+                            <div class="relative">
+                                <select id="group-select" class="appearance-none block w-full p-4 pl-5 border border-slate-200 rounded-xl bg-slate-50 text-slate-700 font-medium focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all cursor-pointer">
+                                    <option value="" disabled selected>Selecciona el curso...</option>
+                                    <optgroup label="1º ESO"><option>1º ESO A</option><option>1º ESO B</option><option>1º ESO C</option><option>1º ESO D</option></optgroup>
+                                    <optgroup label="2º ESO"><option>2º ESO A</option><option>2º ESO B</option><option>2º ESO C</option><option>2º ESO D</option></optgroup>
+                                    <optgroup label="3º ESO"><option>3º ESO A</option><option>3º ESO B</option><option>3º ESO C</option><option>3º ESO D</option></optgroup>
+                                    <optgroup label="4º ESO"><option>4º ESO A</option><option>4º ESO B</option><option>4º ESO C</option><option>4º ESO D</option></optgroup>
+                                    <optgroup label="BACHILLERATO"><option>1º BACH A</option><option>1º BACH B</option><option>2º BACH A</option><option>2º BACH B</option></optgroup>
+                                </select>
+                                <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dropzones -->
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <!-- Percepción -->
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center text-violet-600"><i class="fa-solid fa-users"></i></div>
+                                    <label class="text-sm font-bold text-slate-700">Percepción Real</label>
+                                </div>
+                                <div id="dropzone-perc" class="dropzone-modern flex flex-col justify-center items-center h-48 rounded-2xl cursor-pointer relative overflow-hidden group">
+                                    <div class="absolute inset-0 bg-violet-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <i class="fa-solid fa-cloud-arrow-up text-4xl text-violet-300 mb-3 z-10 group-hover:text-violet-500 group-hover:scale-110 transition-all"></i>
+                                    <span class="text-sm font-semibold text-slate-500 z-10">Arrastra tu Excel aquí</span>
+                                    <span class="text-xs text-slate-400 mt-1 z-10">o haz clic para buscar</span>
+                                    <input id="file-perc" type="file" class="hidden" accept=".xlsx, .xls">
+                                    <div id="name-perc" class="absolute bottom-3 left-0 right-0 text-center text-xs font-bold text-violet-600 bg-white/80 py-1 hidden"></div>
+                                </div>
+                            </div>
+
+                            <!-- Autopercepción -->
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-600"><i class="fa-solid fa-heart"></i></div>
+                                    <label class="text-sm font-bold text-slate-700">Autopercepción</label>
+                                </div>
+                                <div id="dropzone-auto" class="dropzone-modern flex flex-col justify-center items-center h-48 rounded-2xl cursor-pointer relative overflow-hidden group">
+                                    <div class="absolute inset-0 bg-pink-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <i class="fa-solid fa-cloud-arrow-up text-4xl text-pink-300 mb-3 z-10 group-hover:text-pink-500 group-hover:scale-110 transition-all"></i>
+                                    <span class="text-sm font-semibold text-slate-500 z-10">Arrastra tu Excel aquí</span>
+                                    <span class="text-xs text-slate-400 mt-1 z-10">o haz clic para buscar</span>
+                                    <input id="file-auto" type="file" class="hidden" accept=".xlsx, .xls">
+                                    <div id="name-auto" class="absolute bottom-3 left-0 right-0 text-center text-xs font-bold text-pink-600 bg-white/80 py-1 hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botón Acción -->
+                        <button onclick="processAllData()" class="w-full py-5 rounded-2xl bg-slate-900 text-white font-extrabold text-lg shadow-xl shadow-slate-300 hover:bg-violet-600 hover:shadow-violet-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center group">
+                            <span class="group-hover:mr-2 transition-all">ANALIZAR DATOS</span>
+                            <i class="fa-solid fa-arrow-right opacity-0 group-hover:opacity-100 transition-all"></i>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- 2. ANÁLISIS DE PERCEPCIÓN -->
+                <section id="tab-perc" class="tab-content hidden h-full flex flex-col gap-8">
+                    <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
+                        <div class="p-3 bg-violet-100 text-violet-600 rounded-xl"><i class="fa-solid fa-eye text-2xl"></i></div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">Percepción Real</h2>
+                            <p class="text-slate-500 text-sm">Cómo interactúan realmente los alumnos entre sí.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Tarjetas de Métricas -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Participantes</div>
+                            <div id="perc-count" class="text-3xl font-extrabold text-slate-800">--</div>
+                        </div>
+                        <div class="bg-violet-50 p-5 rounded-2xl border border-violet-100">
+                            <div class="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">Cohesión</div>
+                            <div id="perc-cohesion" class="text-3xl font-extrabold text-violet-700">--</div>
+                        </div>
+                        <div class="bg-emerald-50 p-5 rounded-2xl border border-emerald-100">
+                            <div class="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">Aceptaciones (+)</div>
+                            <div id="perc-pos" class="text-3xl font-extrabold text-emerald-700">--</div>
+                        </div>
+                        <div class="bg-rose-50 p-5 rounded-2xl border border-rose-100">
+                            <div class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">Rechazos (-)</div>
+                            <div id="perc-neg" class="text-3xl font-extrabold text-rose-700">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Sociograma -->
+                    <div class="bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
+                        <div class="p-4 border-b border-slate-50 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-700">Sociograma de Interacciones</h3>
+                            <div class="flex gap-2 text-xs font-bold">
+                                <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md">Verde: Aceptación</span>
+                                <span class="px-2 py-1 bg-rose-100 text-rose-700 rounded-md">Rojo: Rechazo</span>
+                            </div>
+                        </div>
+                        <div id="perc-sociogram" class="sociogram-box border-0"></div>
+                    </div>
+
+                    <!-- Tabla -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="p-6 border-b border-slate-100">
+                            <h3 class="font-bold text-slate-800 text-lg">Detalle de nominaciones recibidas</h3>
+                            <p class="text-sm text-slate-400">Aceptaciones y rechazos recibidos.</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th class="px-6 py-4">Estudiante</th>
+                                        <th class="px-6 py-4">Estatus</th>
+                                        <th class="px-6 py-4 text-center text-emerald-600">Positivas (+)</th>
+                                        <th class="px-6 py-4 text-center text-rose-500">Negativas (-)</th>
+                                        <th class="px-6 py-4 text-center">Impacto</th>
+                                        <th class="px-6 py-4 text-center text-violet-600">Preferencia</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="perc-tbody" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. ANÁLISIS DE AUTOPERCEPCIÓN -->
+                <section id="tab-auto" class="tab-content hidden h-full flex flex-col gap-8">
+                    <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
+                        <div class="p-3 bg-pink-100 text-pink-600 rounded-xl"><i class="fa-solid fa-user-astronaut text-2xl"></i></div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">Autopercepción</h2>
+                            <p class="text-slate-500 text-sm">Creencias subjetivas de los alumnos.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Métricas -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="text-xs font-bold text-slate-400 uppercase mb-2">Participantes</div>
+                            <div id="auto-count" class="text-3xl font-extrabold text-slate-800">--</div>
+                        </div>
+                        <div class="bg-purple-50 p-5 rounded-2xl border border-purple-100">
+                            <div class="text-xs font-bold text-purple-400 uppercase mb-2">Cohesión Percibida</div>
+                            <div id="auto-cohesion" class="text-3xl font-extrabold text-purple-700">--</div>
+                        </div>
+                        <div class="bg-emerald-50 p-5 rounded-2xl border border-emerald-100">
+                            <div class="text-xs font-bold text-emerald-500 uppercase mb-2">Creen Recibir (+)</div>
+                            <div id="auto-pos" class="text-3xl font-extrabold text-emerald-700">--</div>
+                        </div>
+                        <div class="bg-rose-50 p-5 rounded-2xl border border-rose-100">
+                            <div class="text-xs font-bold text-rose-400 uppercase mb-2">Creen Recibir (-)</div>
+                            <div id="auto-neg" class="text-3xl font-extrabold text-rose-700">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Sociograma -->
+                    <div class="bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
+                        <div class="p-4 border-b border-slate-50"><h3 class="font-bold text-slate-700">Sociograma de Creencias</h3></div>
+                        <div id="auto-sociogram" class="sociogram-box border-0"></div>
+                    </div>
+
+                    <!-- Tabla -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="p-6 border-b border-slate-100">
+                            <h3 class="font-bold text-slate-800 text-lg">Detalle de nominaciones esperadas</h3>
+                            <p class="text-sm text-slate-400">Cómo creen que son percibidos.</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th class="px-6 py-4">Estudiante</th>
+                                        <th class="px-6 py-4">Estatus Percibido</th>
+                                        <th class="px-6 py-4 text-center text-emerald-600">Acept. Esperadas</th>
+                                        <th class="px-6 py-4 text-center text-rose-500">Rechazos Esperados</th>
+                                        <th class="px-6 py-4 text-center">Impacto Neto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auto-tbody" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. CONTRASTE -->
+                <section id="tab-contra" class="tab-content hidden h-full flex flex-col gap-8">
+                    <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
+                        <div class="p-3 bg-orange-100 text-orange-600 rounded-xl"><i class="fa-solid fa-code-compare text-2xl"></i></div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">Contraste de Datos</h2>
+                            <p class="text-slate-500 text-sm">Comparativa: Realidad vs. Expectativas.</p>
+                        </div>
+                    </div>
+
+                    <!-- Tabla General -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="p-4 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-slate-700">Matriz General de Comparación</h3></div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left" id="contrast-table">
+                                <thead class="bg-white text-slate-500 font-bold text-xs uppercase border-b border-slate-100">
+                                    <tr>
+                                        <th rowspan="2" class="px-6 py-4 bg-slate-50 border-r border-slate-100">Estudiante</th>
+                                        <th colspan="3" class="px-4 py-2 text-center text-violet-600 bg-violet-50/50 border-r border-violet-100">Realidad</th>
+                                        <th colspan="3" class="px-4 py-2 text-center text-pink-600 bg-pink-50/50">Creencia</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="px-2 py-2 text-center bg-violet-50/30">(+)</th>
+                                        <th class="px-2 py-2 text-center bg-violet-50/30">(-)</th>
+                                        <th class="px-2 py-2 text-center bg-violet-50/30 border-r border-violet-100">Estatus</th>
+                                        <th class="px-2 py-2 text-center bg-pink-50/30">(+)</th>
+                                        <th class="px-2 py-2 text-center bg-pink-50/30">(-)</th>
+                                        <th class="px-2 py-2 text-center bg-pink-50/30">Estatus</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="contra-tbody" class="divide-y divide-slate-50"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tablas Precisión -->
+                    <div class="grid lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
+                            <div class="p-4 bg-emerald-50/50 border-b border-emerald-100"><h3 class="font-bold text-emerald-800">Precisión: Aceptación</h3></div>
+                            <div class="overflow-x-auto"><table class="w-full text-sm" id="precision-pos-table"><thead class="bg-emerald-50/30 text-emerald-700 text-xs uppercase"><tr><th class="p-3 text-left">Alumno</th><th class="p-3 text-left">Esperado</th><th class="p-3 text-left">Real</th><th class="p-3 bg-emerald-100/50">Aciertos</th><th class="p-3 bg-rose-50/50">Fallos</th></tr></thead><tbody id="precision-pos-tbody" class="divide-y divide-emerald-50"></tbody></table></div>
+                        </div>
+                        <div class="bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden">
+                            <div class="p-4 bg-rose-50/50 border-b border-rose-100"><h3 class="font-bold text-rose-800">Precisión: Rechazo</h3></div>
+                            <div class="overflow-x-auto"><table class="w-full text-sm" id="precision-neg-table"><thead class="bg-rose-50/30 text-rose-700 text-xs uppercase"><tr><th class="p-3 text-left">Alumno</th><th class="p-3 text-left">Esperado</th><th class="p-3 text-left">Real</th><th class="p-3 bg-emerald-100/50">Aciertos</th><th class="p-3 bg-rose-100/50">Fallos</th></tr></thead><tbody id="precision-neg-tbody" class="divide-y divide-rose-50"></tbody></table></div>
+                        </div>
+                    </div>
+
+                    <!-- Grupos AI -->
+                    <div class="mt-4 pt-6 border-t border-slate-200">
+                        <div class="flex justify-between items-end mb-6">
+                            <div>
+                                <h3 class="text-xl font-bold text-slate-800">Generador de Grupos Inteligente</h3>
+                                <p class="text-slate-500 text-sm">Algoritmo optimizado para evitar conflictos y potenciar la cohesión.</p>
+                            </div>
+                            <button onclick="renderGroups()" class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:text-blue-600 font-bold text-sm shadow-sm transition-all">
+                                <i class="fa-solid fa-rotate mr-2"></i> Regenerar
+                            </button>
+                        </div>
+                        <div id="groups-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6"></div>
+                    </div>
+                </section>
+
+                <!-- 5. EXPORTACIÓN -->
+                <section id="tab-export" class="tab-content hidden h-full flex flex-col items-center justify-center animate-fade-in py-10">
+                    <div class="max-w-5xl w-full text-center space-y-12">
+                        <div>
+                            <h2 class="text-4xl font-extrabold text-slate-800 mb-4">Informes Profesionales</h2>
+                            <p class="text-lg text-slate-500">Descarga los resultados en el formato que necesites.</p>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <!-- Card Percepción -->
+                            <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-xl shadow-slate-100 flex flex-col gap-4 hover:-translate-y-2 transition-transform duration-300">
+                                <div class="w-16 h-16 mx-auto bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center text-3xl mb-2"><i class="fa-solid fa-eye"></i></div>
+                                <h3 class="font-bold text-slate-800 text-lg">Informe Realidad</h3>
+                                <button onclick="generatePDF('perc')" class="w-full py-3 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700 shadow-lg shadow-violet-200 transition-all"><i class="fa-solid fa-file-pdf mr-2"></i> Descargar PDF</button>
+                                <button onclick="generateExcel('perc')" class="w-full py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all"><i class="fa-solid fa-file-excel mr-2 text-emerald-600"></i> Excel</button>
+                            </div>
+
+                            <!-- Card Autopercepción -->
+                            <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-xl shadow-slate-100 flex flex-col gap-4 hover:-translate-y-2 transition-transform duration-300">
+                                <div class="w-16 h-16 mx-auto bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center text-3xl mb-2"><i class="fa-solid fa-user-astronaut"></i></div>
+                                <h3 class="font-bold text-slate-800 text-lg">Informe Creencias</h3>
+                                <button onclick="generatePDF('auto')" class="w-full py-3 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 shadow-lg shadow-pink-200 transition-all"><i class="fa-solid fa-file-pdf mr-2"></i> Descargar PDF</button>
+                                <button onclick="generateExcel('auto')" class="w-full py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all"><i class="fa-solid fa-file-excel mr-2 text-emerald-600"></i> Excel</button>
+                            </div>
+
+                            <!-- Card Contraste -->
+                            <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-xl shadow-slate-100 flex flex-col gap-4 hover:-translate-y-2 transition-transform duration-300">
+                                <div class="w-16 h-16 mx-auto bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center text-3xl mb-2"><i class="fa-solid fa-code-compare"></i></div>
+                                <h3 class="font-bold text-slate-800 text-lg">Informe Contraste</h3>
+                                <button onclick="generatePDF('contra')" class="w-full py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 shadow-lg shadow-orange-200 transition-all"><i class="fa-solid fa-file-pdf mr-2"></i> Descargar PDF</button>
+                                <button onclick="generateExcel('contra')" class="w-full py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all"><i class="fa-solid fa-file-excel mr-2 text-emerald-600"></i> Excel</button>
+                            </div>
+                        </div>
+                        
+                        <button onclick="location.reload()" class="px-8 py-3 text-red-500 font-bold hover:bg-red-50 rounded-full transition-colors"><i class="fa-solid fa-trash mr-2"></i> Cerrar sesión y limpiar datos</button>
+                        <div id="export-status" class="h-6 text-sm font-bold text-violet-600"></div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- FOOTER -->
+            <footer class="bg-slate-50 border-t border-slate-200 p-6 text-center">
+                <div class="font-semibold text-slate-500 text-sm mb-1">
+                    Diseñado por <a href="https://blogsaverroes.juntadeandalucia.es/ellocodelamochila/" target="_blank" class="text-violet-600 hover:text-violet-800 hover:underline">El loco de la mochila</a>
+                </div>
+                <div class="text-xs text-slate-400">&copy; 2023 Suite Sociométrica Educativa.</div>
+            </footer>
+        </div>
+    </main>
+
+    <!-- MODAL DE INSTRUCCIONES -->
+    <div id="modal-instructions" class="modal-backdrop" onclick="toggleInstructions()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 class="text-2xl font-bold text-slate-800">Guía Rápida de Uso</h2>
+                <button onclick="toggleInstructions()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="space-y-6 text-slate-600">
+                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <h3 class="font-bold text-blue-800 mb-2"><i class="fa-solid fa-file-excel mr-2"></i> Formato del Excel (Obligatorio)</h3>
+                    <p class="text-sm mb-3">Tanto para el archivo de "Percepción" como para el de "Autopercepción", debes usar una matriz cuadrada idéntica:</p>
+                    <ul class="list-disc pl-5 text-sm space-y-1">
+                        <li><strong>Fila 1:</strong> Nombres de todos los alumnos (Receptores).</li>
+                        <li><strong>Columna A:</strong> Nombres de todos los alumnos (Emisores).</li>
+                        <li><strong>Celdas:</strong> Escribe <code>+</code> para elección positiva y <code>-</code> para rechazo.</li>
+                    </ul>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="font-bold text-slate-800 mb-2">1. Archivo de Percepción (Real)</h4>
+                        <p class="text-sm text-justify">Representa la realidad del aula. Si el alumno de la Fila A pone un "+" en la columna del alumno B, significa que <strong>A elige a B</strong>.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-800 mb-2">2. Archivo de Autopercepción</h4>
+                        <p class="text-sm text-justify">Representa las creencias. Si el alumno de la Fila A pone un "+" en la columna del alumno B, significa que <strong>A cree que B le ha elegido</strong>.</p>
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 p-4 rounded-xl border border-yellow-100 text-sm text-yellow-800">
+                    <strong>Nota Importante:</strong> Asegúrate de que los nombres estén escritos exactamente igual en las filas y columnas para que el sistema pueda cruzarlos correctamente.
+                </div>
+            </div>
+            
+            <div class="mt-8 text-center">
+                <button onclick="toggleInstructions()" class="px-6 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS Logic -->
+    <script>
+        const AppState = {
+            groupName: "",
+            perc: { data: [], links: [], file: null, network: null },
+            auto: { data: [], links: [], file: null, network: null }
+        };
+
+        // --- UI UTILS ---
+        function toggleInstructions() {
+            const modal = document.getElementById('modal-instructions');
+            if (modal.style.display === 'flex') modal.style.display = 'none';
+            else modal.style.display = 'flex';
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-violet-600', 'border-violet-500');
+                btn.classList.add('text-slate-400', 'border-transparent');
+            });
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            const btn = document.getElementById('btn-' + tabId);
+            if(btn) {
+                btn.classList.remove('text-slate-400', 'border-transparent');
+                btn.classList.add('text-violet-600', 'border-violet-500');
+            }
+
+            if (tabId === 'tab-perc' && AppState.perc.network) AppState.perc.network.fit();
+            if (tabId === 'tab-auto' && AppState.auto.network) AppState.auto.network.fit();
+            if (tabId === 'tab-contra') renderGroups();
+        }
+
+        // --- DEMO DATA GENERATOR ---
+        function loadDemoData() {
+            const students = ["Ana", "Beto", "Carla", "Dani", "Elena", "Fran", "Gabi", "Hugo", "Inés", "Javi"];
+            const matrixPerc = generateMockMatrix(students);
+            const matrixAuto = generateMockMatrix(students); // Slightly different
+
+            // Simulate file load
+            const resPerc = parseSociometricMatrix(matrixPerc);
+            AppState.perc.data = resPerc.students;
+            AppState.perc.links = resPerc.links;
+            AppState.perc.file = true; // Flag as loaded
+
+            const resAuto = parseSociometricMatrix(matrixAuto);
+            AppState.auto.data = resAuto.students;
+            AppState.auto.links = resAuto.links;
+            AppState.auto.file = true;
+
+            AppState.groupName = "Grupo Demo 1º ESO";
+            
+            // Render
+            renderAnalysis('perc', AppState.perc);
+            renderAnalysis('auto', AppState.auto);
+            renderContrast();
+            
+            // Switch tab
+            switchTab('tab-perc');
+            alert("Datos de prueba cargados correctamente.");
+        }
+
+        function generateMockMatrix(names) {
+            // Header Row
+            const matrix = [["", ...names]];
+            // Data Rows
+            names.forEach(name => {
+                const row = [name];
+                names.forEach(target => {
+                    if(name === target) { row.push(""); return; }
+                    const rand = Math.random();
+                    if(rand > 0.8) row.push("+");
+                    else if(rand < 0.1) row.push("-");
+                    else row.push("");
+                });
+                matrix.push(row);
+            });
+            return matrix;
+        }
+
+        // --- FILE HANDLING ---
+        function setupDropzone(zoneId, inputId, nameId, type) {
+            const zone = document.getElementById(zoneId);
+            const input = document.getElementById(inputId);
+            const nameDisplay = document.getElementById(nameId);
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+                zone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+            });
+
+            zone.addEventListener('dragenter', () => zone.classList.add(type === 'perc' ? 'drag-active' : 'drag-active-self'));
+            zone.addEventListener('dragleave', () => zone.classList.remove(type === 'perc' ? 'drag-active' : 'drag-active-self'));
+            
+            zone.addEventListener('drop', (e) => {
+                zone.classList.remove(type === 'perc' ? 'drag-active' : 'drag-active-self');
+                handleFile(e.dataTransfer.files[0], type, nameDisplay);
+            });
+
+            input.addEventListener('change', (e) => handleFile(e.target.files[0], type, nameDisplay));
+            zone.addEventListener('click', () => input.click());
+        }
+
+        function handleFile(file, type, displayEl) {
+            if (!file) return;
+            AppState[type].file = file;
+            displayEl.textContent = file.name;
+            displayEl.classList.remove('hidden');
+        }
+
+        setupDropzone('dropzone-perc', 'file-perc', 'name-perc', 'perc');
+        setupDropzone('dropzone-auto', 'file-auto', 'name-auto', 'auto');
+
+        async function processAllData() {
+            if (AppState.perc.file === true) return; // Demo mode already processed
+            
+            const groupSelect = document.getElementById('group-select');
+            if (groupSelect.value === "") { alert("Seleccione un grupo."); return; }
+            if (!AppState.perc.file && !AppState.auto.file) { alert("Suba archivos o use el modo Demo."); return; }
+
+            AppState.groupName = groupSelect.options[groupSelect.selectedIndex].text;
+            const btn = document.querySelector('button[onclick="processAllData()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>';
+
+            try {
+                if (AppState.perc.file && typeof AppState.perc.file !== 'boolean') {
+                    const raw = await readExcelRaw(AppState.perc.file);
+                    const res = parseSociometricMatrix(raw);
+                    AppState.perc.data = res.students;
+                    AppState.perc.links = res.links;
+                    renderAnalysis('perc', AppState.perc);
+                }
+
+                if (AppState.auto.file && typeof AppState.auto.file !== 'boolean') {
+                    const raw = await readExcelRaw(AppState.auto.file);
+                    const res = parseSociometricMatrix(raw);
+                    AppState.auto.data = res.students;
+                    AppState.auto.links = res.links; 
+                    renderAnalysis('auto', AppState.auto);
+                }
+
+                if (AppState.perc.data.length > 0 && AppState.auto.data.length > 0) {
+                    renderContrast();
+                }
+
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    if(AppState.perc.file) switchTab('tab-perc');
+                    else switchTab('tab-auto');
+                }, 500);
+
+            } catch (err) {
+                alert("Error: " + err.message);
+                btn.innerHTML = originalText;
+            }
+        }
+
+        function readExcelRaw(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }));
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function parseSociometricMatrix(data) {
+            let startIndex = 1;
+            for(let i=0; i<data.length; i++) {
+                if(data[i][0] && data[i][0].toString().length > 1) { startIndex = i; break; }
+            }
+            const students = [];
+            const links = [];
+            
+            for (let i = 1; i < data.length; i++) {
+                if (data[i][0]) {
+                    students.push({
+                        id: i - 1, name: data[i][0].toString().trim(),
+                        pos: 0, neg: 0, rowIdx: i
+                    });
+                }
+            }
+
+            students.forEach(src => {
+                const row = data[src.rowIdx];
+                students.forEach(tgt => {
+                    const colIdx = tgt.id + 1; 
+                    if (colIdx < row.length) {
+                        const val = row[colIdx] ? row[colIdx].toString().trim() : "";
+                        if (val === "+") {
+                            links.push({ from: src.id, to: tgt.id, type: 'positive' });
+                            tgt.pos++;
+                        } else if (val === "-") {
+                            links.push({ from: src.id, to: tgt.id, type: 'negative' });
+                            tgt.neg++;
+                        }
+                    }
+                });
+            });
+
+            students.forEach(s => {
+                s.impact = s.pos + s.neg;
+                s.preference = s.pos - s.neg; 
+                const isHighImpact = s.impact > 3; 
+                const isLowImpact = s.impact <= 2;
+                
+                if (isHighImpact && s.preference > 2) s.status = "Popular";
+                else if (isHighImpact && s.preference < -1) s.status = "Rechazado";
+                else if (isHighImpact && s.preference <= 1 && s.preference >= -1) s.status = "Controvertido";
+                else if (isLowImpact && Math.abs(s.preference) < 2) s.status = "Ignorado";
+                else s.status = "Promedio";
+            });
+
+            return { students, links };
+        }
+
+        // --- RENDERIZADO ---
+        function renderAnalysis(type, dataset) {
+            const totalPos = dataset.data.reduce((a, b) => a + b.pos, 0);
+            const totalLinks = dataset.data.length * (dataset.data.length - 1);
+            const cohesion = totalLinks ? (totalPos / totalLinks).toFixed(2) : 0;
+
+            document.getElementById(`${type}-cohesion`).textContent = cohesion;
+            document.getElementById(`${type}-count`).textContent = dataset.data.length;
+            document.getElementById(`${type}-pos`).textContent = totalPos;
+            document.getElementById(`${type}-neg`).textContent = dataset.data.reduce((a, b) => a + b.neg, 0);
+
+            const tbody = document.getElementById(`${type}-tbody`);
+            tbody.innerHTML = '';
+            dataset.data.sort((a,b) => b.preference - a.preference).forEach(s => {
+                let badgeColor = "bg-slate-100 text-slate-600";
+                if(s.status==="Popular") badgeColor = "bg-emerald-100 text-emerald-700";
+                if(s.status==="Rechazado") badgeColor = "bg-rose-100 text-rose-700";
+
+                let rowHTML = `
+                    <tr class="hover:bg-slate-50 border-b border-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-medium text-slate-800">${s.name}</td>
+                        <td class="px-6 py-4 text-xs"><span class="px-2 py-1 rounded-md font-bold ${badgeColor}">${s.status.toUpperCase()}</span></td>
+                        <td class="px-6 py-4 text-center text-emerald-600 font-bold bg-emerald-50/30">${s.pos}</td>
+                        <td class="px-6 py-4 text-center text-rose-500 font-bold bg-rose-50/30">${s.neg}</td>
+                        <td class="px-6 py-4 text-center font-bold text-slate-700">${s.impact}</td>
+                `;
+                if(type === 'perc') {
+                    rowHTML += `<td class="px-6 py-4 text-center font-bold text-violet-600 bg-violet-50/30">${s.preference}</td></tr>`;
+                } else {
+                    rowHTML += `</tr>`;
+                }
+                tbody.innerHTML += rowHTML;
+            });
+
+            initSociogram(type, dataset.data, dataset.links);
+        }
+
+        function renderContrast() {
+            const tbody = document.getElementById('contra-tbody');
+            tbody.innerHTML = '';
+            const autoMap = new Map(AppState.auto.data.map(s => [s.name.toLowerCase(), s]));
+            
+            AppState.perc.data.forEach(p => {
+                const a = autoMap.get(p.name.toLowerCase()) || { pos: '-', neg: '-', status: '-' };
+                tbody.innerHTML += `
+                    <tr class="hover:bg-orange-50/10 border-b border-slate-50">
+                        <td class="px-6 py-4 font-medium text-slate-800 border-r border-slate-100">${p.name}</td>
+                        <td class="px-2 py-2 text-center text-slate-600 border-r border-slate-100 bg-violet-50/20">${p.pos}</td>
+                        <td class="px-2 py-2 text-center text-slate-600 border-r border-slate-100 bg-violet-50/20">${p.neg}</td>
+                        <td class="px-2 py-2 text-center font-bold text-xs text-violet-700 border-r border-slate-100 bg-violet-50/40">${p.status.substring(0,3)}</td>
+                        <td class="px-2 py-2 text-center text-slate-600 border-r border-slate-100 bg-pink-50/20">${a.pos}</td>
+                        <td class="px-2 py-2 text-center text-slate-600 border-r border-slate-100 bg-pink-50/20">${a.neg}</td>
+                        <td class="px-2 py-2 text-center font-bold text-xs text-pink-700 bg-pink-50/40">${a.status.substring(0,3)}</td>
+                    </tr>
+                `;
+            });
+
+            renderPrecisionTable('positive');
+            renderPrecisionTable('negative');
+        }
+
+        function renderPrecisionTable(voteType) {
+            const tableId = voteType === 'positive' ? 'precision-pos-tbody' : 'precision-neg-tbody';
+            const tbody = document.getElementById(tableId);
+            tbody.innerHTML = '';
+
+            const idToName = new Map(AppState.perc.data.map(s => [s.id, s.name]));
+
+            AppState.perc.data.forEach(student => {
+                const realSources = AppState.perc.links.filter(l => l.to === student.id && l.type === voteType).map(l => idToName.get(l.from)).filter(n=>n);
+                const expectedSources = AppState.auto.links.filter(l => l.from === student.id && l.type === voteType).map(l => idToName.get(l.to)).filter(n=>n);
+
+                const hits = expectedSources.filter(name => realSources.includes(name));
+                const misses = [...expectedSources.filter(n => !realSources.includes(n)), ...realSources.filter(n => !expectedSources.includes(n))];
+
+                tbody.innerHTML += `
+                    <tr class="border-b border-slate-50 hover:bg-slate-50">
+                        <td class="px-4 py-2 font-medium">${student.name}</td>
+                        <td class="px-4 py-2 text-xs text-slate-500">${expectedSources.join(', ') || '-'}</td>
+                        <td class="px-4 py-2 text-xs text-slate-500">${realSources.join(', ') || '-'}</td>
+                        <td class="px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50/30">${hits.join(', ') || '-'}</td>
+                        <td class="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50/30">${misses.join(', ') || '-'}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderGroups() {
+            const students = AppState.perc.data;
+            if (students.length === 0) return;
+
+            const container = document.getElementById('groups-container');
+            container.innerHTML = '';
+
+            const rejections = new Map(); 
+            AppState.perc.links.filter(l => l.type === 'negative').forEach(l => {
+                if (!rejections.has(l.from)) rejections.set(l.from, new Set());
+                rejections.get(l.from).add(l.to);
+            });
+
+            const positiveLinks = new Map(); 
+            AppState.perc.links.filter(l => l.type === 'positive').forEach(l => {
+                if (!positiveLinks.has(l.to)) positiveLinks.set(l.to, new Set());
+                positiveLinks.get(l.to).add(l.from); 
+            });
+
+            const numGroups = Math.ceil(students.length / 4);
+            const groups = Array.from({length: numGroups}, () => []);
+            const studentPool = [...students].sort((a,b) => a.impact - b.impact); 
+
+            studentPool.forEach(student => {
+                let bestGroupIdx = -1;
+                let bestScore = -Infinity;
+
+                for(let i=0; i<numGroups; i++) {
+                    const group = groups[i];
+                    if (group.length >= Math.ceil(students.length/numGroups) + 1) continue; 
+
+                    let mutualConflict = false;
+                    for (let member of group) {
+                        const sRejectsM = rejections.get(student.id)?.has(member.id);
+                        const mRejectsS = rejections.get(member.id)?.has(student.id);
+                        if (sRejectsM && mRejectsS) { mutualConflict = true; break; }
+                    }
+                    if (mutualConflict) continue;
+
+                    let supportScore = 0;
+                    const supporters = positiveLinks.get(student.id);
+                    if (supporters) {
+                        for (let member of group) {
+                            if (supporters.has(member.id)) supportScore++;
+                        }
+                    }
+                    const score = (supportScore * 10) - group.length;
+                    if (score > bestScore) { bestScore = score; bestGroupIdx = i; }
+                }
+
+                if (bestGroupIdx === -1) {
+                    let minLen = Infinity;
+                    groups.forEach((g, idx) => { if(g.length < minLen) { minLen=g.length; bestGroupIdx=idx; } });
+                }
+                groups[bestGroupIdx].push(student);
+            });
+
+            groups.forEach((group, idx) => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'group-container bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow';
+                groupDiv.innerHTML = `<h4 class="font-bold text-slate-700 border-b border-slate-100 pb-2 mb-3 flex justify-between">Grupo ${idx+1} <span class="text-xs bg-slate-100 px-2 py-1 rounded-full">${group.length}</span></h4>`;
+                
+                groupDiv.addEventListener('dragover', e => { e.preventDefault(); groupDiv.classList.add('drag-over'); });
+                groupDiv.addEventListener('dragleave', () => groupDiv.classList.remove('drag-over'));
+                groupDiv.addEventListener('drop', e => {
+                    e.preventDefault();
+                    groupDiv.classList.remove('drag-over');
+                    const name = e.dataTransfer.getData('text/plain');
+                    const card = document.getElementById(`card-${name}`);
+                    if (card) groupDiv.appendChild(card);
+                });
+
+                group.forEach(s => {
+                    const card = document.createElement('div');
+                    card.id = `card-${s.name}`;
+                    card.className = 'student-card bg-slate-50 border border-slate-100 p-2.5 mb-2 rounded-xl text-sm font-medium text-slate-700 flex justify-between items-center shadow-sm';
+                    card.draggable = true;
+                    let dotColor = s.status==="Popular"?"bg-emerald-400":s.status==="Rechazado"?"bg-rose-400":"bg-slate-300";
+                    card.innerHTML = `<span>${s.name}</span> <div class="w-2 h-2 rounded-full ${dotColor}"></div>`;
+                    
+                    card.addEventListener('dragstart', e => {
+                        e.dataTransfer.setData('text/plain', s.name);
+                        setTimeout(() => card.classList.add('opacity-50'), 0);
+                    });
+                    card.addEventListener('dragend', () => card.classList.remove('opacity-50'));
+                    
+                    groupDiv.appendChild(card);
+                });
+                container.appendChild(groupDiv);
+            });
+        }
+
+        function initSociogram(type, nodesData, edgesData) {
+            const container = document.getElementById(`${type}-sociogram`);
+            const nodes = new vis.DataSet(nodesData.map(s => ({
+                id: s.id, label: s.name.split(' ')[0], 
+                color: { background: type==='perc'?'#a78bfa':'#f472b6', border: 'white' },
+                font: { size: 14, color: '#334155', face: 'Plus Jakarta Sans' },
+                shape: 'dot', size: 10 + (s.pos * 1.5)
+            })));
+            const edges = new vis.DataSet(edgesData.map(l => ({
+                from: l.from, to: l.to, arrows: 'to',
+                color: { color: l.type==='positive' ? '#10b981' : '#f43f5e', opacity: 0.6 }
+            })));
+            const options = { physics: { stabilization: false, solver: 'forceAtlas2Based' }, interaction: { zoomView: true } };
+            AppState[type].network = new vis.Network(container, { nodes, edges }, options);
+        }
+
+        function generatePDF(type) {
+            const status = document.getElementById('export-status');
+            status.textContent = "Generando PDF...";
+            const loader = document.createElement('div');
+            loader.className = 'pdf-loading-msg';
+            loader.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Generando PDF...';
+            document.body.appendChild(loader);
+
+            const overlay = document.createElement('div'); overlay.className = 'print-overlay';
+            const container = document.createElement('div'); container.className = 'print-container';
+            const date = new Date().toLocaleDateString();
+            
+            let title = "", sub = "", colorClass = "cover-accent";
+            if (type === 'perc') { title = "PERCEPCIÓN REAL"; sub = "Análisis Sociométrico"; }
+            else if (type === 'auto') { title = "AUTOPERCEPCIÓN"; sub = "Creencias del Alumnado"; colorClass = "cover-accent-purple"; }
+            else { title = "INFORME CONTRASTE"; sub = "Realidad vs. Creencia"; colorClass = "cover-accent-orange"; }
+
+            container.innerHTML = `
+                <div class="pdf-cover-page">
+                    <div class="cover-accent ${type==='auto'?'cover-accent-purple':type==='contra'?'cover-accent-orange':''}"></div>
+                    <h1 style="font-size:40px; font-weight:900; color:#1e293b;">${title}</h1>
+                    <h2 style="font-size:18px; color:#64748b; margin-bottom:60px;">${sub}</h2>
+                    <div style="border:1px solid #e2e8f0; padding:30px; width:80%;">
+                        <p style="font-size:14px; color:#94a3b8;">GRUPO</p>
+                        <p style="font-size:24px; font-weight:bold; color:#334155;">${AppState.groupName}</p>
+                    </div>
+                </div>
+            `;
+
+            const page2 = document.createElement('div');
+            page2.className = 'pdf-content-page';
+
+            if (type === 'contra') {
+                const tableMain = document.getElementById('contrast-table').outerHTML;
+                const tablePos = document.getElementById('precision-pos-table').outerHTML;
+                const tableNeg = document.getElementById('precision-neg-table').outerHTML;
+                // No drag events in PDF
+                const groupsHTML = document.getElementById('groups-container').innerHTML.replace(/draggable="true"/g, '');
+                
+                page2.innerHTML = `
+                    <div class="pdf-header"><span>Contraste</span></div>
+                    <h3 style="font-size:14px; font-weight:bold; color:#334155;">1. Comparativa General</h3>
+                    ${tableMain}
+                    <div style="height:30px;"></div>
+                    <h3 style="font-size:14px; font-weight:bold; color:#15803d;">2. Precisión Aceptación</h3>
+                    ${tablePos}
+                    <div style="height:30px;"></div>
+                    <h3 style="font-size:14px; font-weight:bold; color:#b91c1c;">3. Precisión Rechazo</h3>
+                    ${tableNeg}
+                    <div style="page-break-before:always;"></div>
+                    <div class="pdf-header"><span>Propuesta de Grupos</span></div>
+                    <h3 style="font-size:14px; font-weight:bold; color:#334155; margin-bottom:20px;">4. Grupos de Trabajo (Visual)</h3>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; font-size:10px;">${groupsHTML}</div>
+                `;
+            } else {
+                const rows = AppState[type].data.sort((a,b) => b.preference - a.preference).map(s => `
+                    <tr>
+                        <td>${s.name}</td><td>${s.status}</td>
+                        <td style="text-align:center; color:green;">${s.pos}</td>
+                        <td style="text-align:center; color:red;">${s.neg}</td>
+                        <td style="text-align:center;">${s.impact}</td>
+                        ${type==='perc' ? `<td style="text-align:center;">${s.preference}</td>` : ''}
+                    </tr>`).join('');
+                
+                page2.innerHTML = `
+                    <div class="pdf-header"><span>Detalle de Datos</span></div>
+                    <h3 style="font-size:14px; font-weight:bold; margin-bottom:10px;">Listado Completo</h3>
+                    <table class="pdf-table">
+                        <thead><tr><th>Alumno</th><th>Estatus</th><th style="text-align:center;">(+)</th><th style="text-align:center;">(-)</th><th style="text-align:center;">Imp.</th>${type==='perc'?'<th style="text-align:center;">Pref.</th>':''}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+            }
+            container.appendChild(page2);
+            overlay.appendChild(container);
+            document.body.appendChild(overlay);
+
+            setTimeout(() => {
+                html2pdf().set({ margin:0, filename:`Informe_${type}.pdf`, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2}, jsPDF:{unit:'px', format:[800,1120]} })
+                .from(container).save().then(() => { 
+                    document.body.removeChild(overlay); 
+                    document.body.removeChild(loader);
+                    status.textContent = ""; 
+                });
+            }, 1000);
+        }
+
+        function generateExcel(type) {
+            let data = [];
+            if (type === 'contra') {
+                const autoMap = new Map(AppState.auto.data.map(s => [s.name.toLowerCase(), s]));
+                data = AppState.perc.data.map(p => {
+                    const a = autoMap.get(p.name.toLowerCase()) || { pos: 0, neg: 0, status: '-' };
+                    return {
+                        Nombre: p.name, Real_Pos: p.pos, Real_Neg: p.neg, Real_Estatus: p.status,
+                        Creencia_Pos: a.pos, Creencia_Neg: a.neg, Creencia_Estatus: a.status
+                    };
+                });
+            } else {
+                data = AppState[type].data.map(s => ({ Nombre: s.name, Estatus: s.status, Pos: s.pos, Neg: s.neg, Impacto: s.impact, ...(type==='perc'?{Preferencia:s.preference}:{}) }));
+            }
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Datos");
+            XLSX.writeFile(wb, `Sociometria_${type}.xlsx`);
+        }
+    </script>
+</body>
+</html>
